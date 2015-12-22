@@ -13,7 +13,6 @@
 
 var ReactComponent = require('ReactComponent');
 var ReactElement = require('ReactElement');
-var ReactErrorUtils = require('ReactErrorUtils');
 var ReactPropTypeLocations = require('ReactPropTypeLocations');
 var ReactPropTypeLocationNames = require('ReactPropTypeLocationNames');
 var ReactNoopUpdateQueue = require('ReactNoopUpdateQueue');
@@ -54,18 +53,6 @@ var SpecPolicy = keyMirror({
 
 
 var injectedMixins = [];
-
-var warnedSetProps = false;
-function warnSetProps() {
-  if (!warnedSetProps) {
-    warnedSetProps = true;
-    warning(
-      false,
-      'setProps(...) and replaceProps(...) are deprecated. ' +
-      'Instead, call React.render again at the top level.'
-    );
-  }
-}
 
 /**
  * Composite components are higher-level components that compose other composite
@@ -395,13 +382,14 @@ var RESERVED_SPEC_KEYS = {
   statics: function(Constructor, statics) {
     mixStaticSpecIntoComponent(Constructor, statics);
   },
+  autobind: function() {}, // noop
 };
 
 function validateTypeDef(Constructor, typeDef, location) {
   for (var propName in typeDef) {
     if (typeDef.hasOwnProperty(propName)) {
       // use a warning instead of an invariant so components
-      // don't show up in prod but not in __DEV__
+      // don't show up in prod but only in __DEV__
       warning(
         typeof typeDef[propName] === 'function',
         '%s: %s type `%s` is invalid; it must be a function, usually from ' +
@@ -414,7 +402,7 @@ function validateTypeDef(Constructor, typeDef, location) {
   }
 }
 
-function validateMethodOverride(proto, name) {
+function validateMethodOverride(isAlreadyDefined, name) {
   var specPolicy = ReactClassInterface.hasOwnProperty(name) ?
     ReactClassInterface[name] :
     null;
@@ -431,7 +419,7 @@ function validateMethodOverride(proto, name) {
   }
 
   // Disallow defining methods more than once unless explicitly allowed.
-  if (proto.hasOwnProperty(name)) {
+  if (isAlreadyDefined) {
     invariant(
       specPolicy === SpecPolicy.DEFINE_MANY ||
       specPolicy === SpecPolicy.DEFINE_MANY_MERGED,
@@ -445,7 +433,7 @@ function validateMethodOverride(proto, name) {
 
 /**
  * Mixin helper which handles policy validation and reserved
- * specification keys when building React classses.
+ * specification keys when building React classes.
  */
 function mixSpecIntoComponent(Constructor, spec) {
   if (!spec) {
@@ -455,7 +443,8 @@ function mixSpecIntoComponent(Constructor, spec) {
   invariant(
     typeof spec !== 'function',
     'ReactClass: You\'re attempting to ' +
-    'use a component class as a mixin. Instead, just use a regular object.'
+    'use a component class or function as a mixin. Instead, just use a ' +
+    'regular object.'
   );
   invariant(
     !ReactElement.isValidElement(spec),
@@ -464,6 +453,7 @@ function mixSpecIntoComponent(Constructor, spec) {
   );
 
   var proto = Constructor.prototype;
+  var autoBindPairs = proto.__reactAutoBindPairs;
 
   // By handling mixins before any other properties, we ensure the same
   // chaining order is applied to methods with DEFINE_MANY policy, whether
@@ -483,7 +473,8 @@ function mixSpecIntoComponent(Constructor, spec) {
     }
 
     var property = spec[name];
-    validateMethodOverride(proto, name);
+    var isAlreadyDefined = proto.hasOwnProperty(name);
+    validateMethodOverride(isAlreadyDefined, name);
 
     if (RESERVED_SPEC_KEYS.hasOwnProperty(name)) {
       RESERVED_SPEC_KEYS[name](Constructor, property);
@@ -494,18 +485,15 @@ function mixSpecIntoComponent(Constructor, spec) {
       // 2. Overridden methods (that were mixed in).
       var isReactClassMethod =
         ReactClassInterface.hasOwnProperty(name);
-      var isAlreadyDefined = proto.hasOwnProperty(name);
       var isFunction = typeof property === 'function';
       var shouldAutoBind =
         isFunction &&
         !isReactClassMethod &&
-        !isAlreadyDefined;
+        !isAlreadyDefined &&
+        spec.autobind !== false;
 
       if (shouldAutoBind) {
-        if (!proto.__reactAutoBindMap) {
-          proto.__reactAutoBindMap = {};
-        }
-        proto.__reactAutoBindMap[name] = property;
+        autoBindPairs.push(name, property);
         proto[name] = property;
       } else {
         if (isAlreadyDefined) {
@@ -661,7 +649,6 @@ function bindAutoBindMethod(component, method) {
     boundMethod.__reactBoundArguments = null;
     var componentName = component.constructor.displayName;
     var _bind = boundMethod.bind;
-    /* eslint-disable block-scoped-var, no-undef */
     boundMethod.bind = function(newThis, ...args) {
       // User is trying to bind() an autobound method; we effectively will
       // ignore the value of "this" that the user is trying to use, so
@@ -688,7 +675,6 @@ function bindAutoBindMethod(component, method) {
       reboundMethod.__reactBoundMethod = method;
       reboundMethod.__reactBoundArguments = args;
       return reboundMethod;
-      /* eslint-enable */
     };
   }
   return boundMethod;
@@ -700,17 +686,14 @@ function bindAutoBindMethod(component, method) {
  * @param {object} component Component whose method is going to be bound.
  */
 function bindAutoBindMethods(component) {
-  for (var autoBindKey in component.__reactAutoBindMap) {
-    if (component.__reactAutoBindMap.hasOwnProperty(autoBindKey)) {
-      var method = component.__reactAutoBindMap[autoBindKey];
-      component[autoBindKey] = bindAutoBindMethod(
-        component,
-        ReactErrorUtils.guard(
-          method,
-          component.constructor.displayName + '.' + autoBindKey
-        )
-      );
-    }
+  var pairs = component.__reactAutoBindPairs;
+  for (var i = 0; i < pairs.length; i += 2) {
+    var autoBindKey = pairs[i];
+    var method = pairs[i + 1];
+    component[autoBindKey] = bindAutoBindMethod(
+      component,
+      method
+    );
   }
 }
 
@@ -739,44 +722,6 @@ var ReactClassMixin = {
    */
   isMounted: function() {
     return this.updater.isMounted(this);
-  },
-
-  /**
-   * Sets a subset of the props.
-   *
-   * @param {object} partialProps Subset of the next props.
-   * @param {?function} callback Called after props are updated.
-   * @final
-   * @public
-   * @deprecated
-   */
-  setProps: function(partialProps, callback) {
-    if (__DEV__) {
-      warnSetProps();
-    }
-    this.updater.enqueueSetProps(this, partialProps);
-    if (callback) {
-      this.updater.enqueueCallback(this, callback);
-    }
-  },
-
-  /**
-   * Replace all the props.
-   *
-   * @param {object} newProps Subset of the next props.
-   * @param {?function} callback Called after props are updated.
-   * @final
-   * @public
-   * @deprecated
-   */
-  replaceProps: function(newProps, callback) {
-    if (__DEV__) {
-      warnSetProps();
-    }
-    this.updater.enqueueReplaceProps(this, newProps);
-    if (callback) {
-      this.updater.enqueueCallback(this, callback);
-    }
   },
 };
 
@@ -815,7 +760,7 @@ var ReactClass = {
       }
 
       // Wire up auto-binding
-      if (this.__reactAutoBindMap) {
+      if (this.__reactAutoBindPairs.length) {
         bindAutoBindMethods(this);
       }
 
@@ -849,6 +794,7 @@ var ReactClass = {
     };
     Constructor.prototype = new ReactClassComponent();
     Constructor.prototype.constructor = Constructor;
+    Constructor.prototype.__reactAutoBindPairs = [];
 
     injectedMixins.forEach(
       mixSpecIntoComponent.bind(null, Constructor)

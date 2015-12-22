@@ -7,18 +7,18 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  *
  * @providesModule DOMPropertyOperations
- * @typechecks static-only
  */
 
 'use strict';
 
 var DOMProperty = require('DOMProperty');
+var EventPluginRegistry = require('EventPluginRegistry');
+var ReactPerf = require('ReactPerf');
 
 var quoteAttributeValueForBrowser = require('quoteAttributeValueForBrowser');
 var warning = require('warning');
 
-// Simplified subset
-var VALID_ATTRIBUTE_NAME_REGEX = /^[a-zA-Z_][a-zA-Z_\.\-\d]*$/;
+var VALID_ATTRIBUTE_NAME_REGEX = new RegExp('^[' + DOMProperty.ATTRIBUTE_NAME_START_CHAR + '][' + DOMProperty.ATTRIBUTE_NAME_CHAR + ']*$');
 var illegalAttributeNameCache = {};
 var validatedAttributeNameCache = {};
 
@@ -86,6 +86,20 @@ if (__DEV__) {
       standardName
     );
 
+    var registrationName = (
+      EventPluginRegistry.possibleRegistrationNames.hasOwnProperty(
+        lowerCasedName
+      ) ?
+      EventPluginRegistry.possibleRegistrationNames[lowerCasedName] :
+      null
+    );
+
+    warning(
+      registrationName == null,
+      'Unknown event handler property %s. Did you mean `%s`?',
+      name,
+      registrationName
+    );
   };
 }
 
@@ -103,6 +117,18 @@ var DOMPropertyOperations = {
   createMarkupForID: function(id) {
     return DOMProperty.ID_ATTRIBUTE_NAME + '=' +
       quoteAttributeValueForBrowser(id);
+  },
+
+  setAttributeForID: function(node, id) {
+    node.setAttribute(DOMProperty.ID_ATTRIBUTE_NAME, id);
+  },
+
+  createMarkupForRoot: function() {
+    return DOMProperty.ROOT_ATTRIBUTE_NAME + '=""';
+  },
+
+  setAttributeForRoot: function(node) {
+    node.setAttribute(DOMProperty.ROOT_ATTRIBUTE_NAME, '');
   },
 
   /**
@@ -173,6 +199,9 @@ var DOMPropertyOperations = {
         // ('' + value) makes it output the correct toString()-value.
         if (namespace) {
           node.setAttributeNS(namespace, attributeName, '' + value);
+        } else if (propertyInfo.hasBooleanValue ||
+                   (propertyInfo.hasOverloadedBooleanValue && value === true)) {
+          node.setAttribute(attributeName, '');
         } else {
           node.setAttribute(attributeName, '' + value);
         }
@@ -239,5 +268,11 @@ var DOMPropertyOperations = {
   },
 
 };
+
+ReactPerf.measureMethods(DOMPropertyOperations, 'DOMPropertyOperations', {
+  setValueForProperty: 'setValueForProperty',
+  setValueForAttribute: 'setValueForAttribute',
+  deleteValueForProperty: 'deleteValueForProperty',
+});
 
 module.exports = DOMPropertyOperations;
