@@ -14,8 +14,10 @@
     title: Videos
   - id: complementary-tools
     title: Complementary Tools
+    href: https://github.com/facebook/react/wiki/Complementary-Tools
   - id: examples
     title: Examples
+    href: https://github.com/facebook/react/wiki/Examples
 - title: Guides
   items:
   - id: why-react
@@ -46,6 +48,13 @@
       title: Refs to Components
   - id: tooling-integration
     title: Tooling Integration
+    subitems:
+    - id: language-tooling
+      title: Language Tooling
+    - id: package-management
+      title: Package Management
+    - id: environments
+      title: Server-side Environments
   - id: addons
     title: Add-Ons
     subitems:
@@ -93,11 +102,3 @@
     title: Web Components
   - id: glossary
     title: React (Virtual) DOM Terminology
-- title: Flux
-  items:
-  - id: flux-overview
-    title: Flux Overview
-    href: https://facebook.github.io/flux/docs/overview.html
-  - id: flux-todo-list
-    title: Flux TodoMVC Tutorial
-    href: https://facebook.github.io/flux/docs/todo-list.html

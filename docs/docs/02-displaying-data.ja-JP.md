@@ -1,7 +1,7 @@
 ---
 id: displaying-data-ja-JP
 title: データを表示する
-permalink: displaying-data-ja-JP.html
+permalink: docs/displaying-data-ja-JP.html
 prev: why-react-ja-JP.html
 next: jsx-in-depth-ja-JP.html
 
@@ -19,8 +19,9 @@ UIについて、最も基本的なことは、いくつかのデータを表示
   <head>
     <meta charset="UTF-8" />
     <title>Hello React</title>
-    <script src="https://fb.me/react-{{site.react_version}}.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-core/5.8.23/browser.min.js"></script>
+    <script src="https://npmcdn.com/react@{{site.react_version}}/dist/react.js"></script>
+    <script src="https://npmcdn.com/react-dom@{{site.react_version}}/dist/react-dom.js"></script>
+    <script src="https://npmcdn.com/babel-core@5.8.38/browser.min.js"></script>
   </head>
   <body>
     <div id="example"></div>
@@ -62,7 +63,7 @@ setInterval(function() {
 
 このことについて私たちが理解できる方法は、Reactは必要になるまで、DOMの操作を行わないということです。 **Reactは、DOMの変化を表現し、あなたにもっとも効率的なDOMの変化を見積もるために早い、内部のモックのDOMを使っています。**
 
-このコンポーネントのインプットは `props` と呼ばれるものです。"properties" の省略形です。それらはJSXシンタックスの中でアトリビュートとして渡されます。それらはコンポーネントの中で不変と考えるべきで、 **`this.props` と書かないようにしてください**
+このコンポーネントのインプットは `props` と呼ばれるものです。"properties" の省略形です。それらはJSXシンタックスの中でアトリビュートとして渡されます。それらはコンポーネントの中で不変と考えるべきで、 **`this.props` には書き込まないようにしてください**
 
 ## コンポーネントは関数のようなものです。
 

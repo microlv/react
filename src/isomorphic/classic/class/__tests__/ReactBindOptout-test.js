@@ -1,5 +1,5 @@
 /**
- * Copyright 2013-2015, Facebook, Inc.
+ * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
  *
  * This source code is licensed under the BSD-style license found in the
@@ -20,9 +20,9 @@ describe('autobind optout', function() {
 
   it('should work with manual binding', function() {
 
-    var mouseDidEnter = jest.genMockFn();
-    var mouseDidLeave = jest.genMockFn();
-    var mouseDidClick = jest.genMockFn();
+    var mouseDidEnter = jest.fn();
+    var mouseDidLeave = jest.fn();
+    var mouseDidClick = jest.fn();
 
     var TestBindComponent = React.createClass({
       autobind: false,
@@ -138,7 +138,7 @@ describe('autobind optout', function() {
   });
 
   it('works with mixins that have not opted out of autobinding', function() {
-    var mouseDidClick = jest.genMockFn();
+    var mouseDidClick = jest.fn();
 
     var TestMixin = {
       onClick: mouseDidClick,
@@ -164,7 +164,7 @@ describe('autobind optout', function() {
   });
 
   it('works with mixins that have opted out of autobinding', function() {
-    var mouseDidClick = jest.genMockFn();
+    var mouseDidClick = jest.fn();
 
     var TestMixin = {
       autobind: false,
@@ -203,7 +203,7 @@ describe('autobind optout', function() {
 
     ReactTestUtils.renderIntoDocument(<TestBindComponent />);
 
-    expect(console.error.argsForCall.length).toBe(0);
+    expect(console.error.calls.count()).toBe(0);
   });
 
   it('does not warn if you pass an manually bound method to setState', function() {
@@ -227,7 +227,7 @@ describe('autobind optout', function() {
 
     ReactTestUtils.renderIntoDocument(<TestBindComponent />);
 
-    expect(console.error.argsForCall.length).toBe(0);
+    expect(console.error.calls.count()).toBe(0);
   });
 
 });

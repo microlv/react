@@ -1,5 +1,5 @@
 /**
- * Copyright 2013-2015, Facebook, Inc.
+ * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
  *
  * This source code is licensed under the BSD-style license found in the
@@ -53,8 +53,8 @@ describe('ReactMount', function() {
     var rootDiv = mainContainerDiv.firstChild;
     spyOn(console, 'error');
     ReactDOM.unmountComponentAtNode(rootDiv);
-    expect(console.error.calls.length).toBe(1);
-    expect(console.error.argsForCall[0][0]).toBe(
+    expect(console.error.calls.count()).toBe(1);
+    expect(console.error.calls.argsFor(0)[0]).toBe(
       'Warning: unmountComponentAtNode(): The node you\'re attempting to ' +
       'unmount was rendered by React and is not a top-level container. You ' +
       'may have accidentally passed in a React root node instead of its ' +
@@ -77,8 +77,8 @@ describe('ReactMount', function() {
     var nonRootDiv = mainContainerDiv.firstChild.firstChild;
     spyOn(console, 'error');
     ReactDOM.unmountComponentAtNode(nonRootDiv);
-    expect(console.error.calls.length).toBe(1);
-    expect(console.error.argsForCall[0][0]).toBe(
+    expect(console.error.calls.count()).toBe(1);
+    expect(console.error.calls.argsFor(0)[0]).toBe(
       'Warning: unmountComponentAtNode(): The node you\'re attempting to ' +
       'unmount was rendered by React and is not a top-level container. ' +
       'Instead, have the parent component update its state and rerender in ' +

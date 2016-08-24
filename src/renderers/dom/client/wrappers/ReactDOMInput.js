@@ -1,5 +1,5 @@
 /**
- * Copyright 2013-2015, Facebook, Inc.
+ * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
  *
  * This source code is licensed under the BSD-style license found in the
@@ -11,20 +11,21 @@
 
 'use strict';
 
+var DisabledInputUtils = require('DisabledInputUtils');
 var DOMPropertyOperations = require('DOMPropertyOperations');
 var LinkedValueUtils = require('LinkedValueUtils');
 var ReactDOMComponentTree = require('ReactDOMComponentTree');
 var ReactUpdates = require('ReactUpdates');
 
-var assign = require('Object.assign');
 var invariant = require('invariant');
 var warning = require('warning');
 
-var instancesByReactID = {};
-
 var didWarnValueLink = false;
 var didWarnCheckedLink = false;
-var didWarnValueNull = false;
+var didWarnValueDefaultValue = false;
+var didWarnCheckedDefaultChecked = false;
+var didWarnControlledToUncontrolled = false;
+var didWarnUncontrolledToControlled = false;
 
 function forceUpdateIfMounted() {
   if (this._rootNodeID) {
@@ -33,21 +34,13 @@ function forceUpdateIfMounted() {
   }
 }
 
-function warnIfValueIsNull(props) {
-  if (props != null && props.value === null && !didWarnValueNull) {
-    warning(
-      false,
-      '`value` prop on `input` should not be null. ' +
-      'Consider using the empty string to clear the component or `undefined` ' +
-      'for uncontrolled components.'
-    );
-
-    didWarnValueNull = true;
-  }
+function isControlled(props) {
+  var usesChecked = props.type === 'checkbox' || props.type === 'radio';
+  return usesChecked ? props.checked !== undefined : props.value !== undefined;
 }
 
 /**
- * Implements an <input> native component that allows setting these optional
+ * Implements an <input> host component that allows setting these optional
  * props: `checked`, `value`, `defaultChecked`, and `defaultValue`.
  *
  * If `checked` or `value` are not supplied (or null/undefined), user actions
@@ -63,11 +56,22 @@ function warnIfValueIsNull(props) {
  * @see http://www.w3.org/TR/2012/WD-html5-20121025/the-input-element.html
  */
 var ReactDOMInput = {
-  getNativeProps: function(inst, props) {
+  getHostProps: function(inst, props) {
     var value = LinkedValueUtils.getValue(props);
     var checked = LinkedValueUtils.getChecked(props);
 
-    var nativeProps = assign({}, props, {
+    var hostProps = Object.assign({
+      // Make sure we set .type before any other properties (setting .value
+      // before .type means .value is lost in IE11 and below)
+      type: undefined,
+      // Make sure we set .step before .value (setting .value before .step
+      // means .value is rounded on mount, based upon step precision)
+      step: undefined,
+      // Make sure we set .min & .max before .value (to ensure proper order
+      // in corner cases such as min or max deriving from value, e.g. Issue #7170)
+      min: undefined,
+      max: undefined,
+    }, DisabledInputUtils.getHostProps(inst, props), {
       defaultChecked: undefined,
       defaultValue: undefined,
       value: value != null ? value : inst._wrapperState.initialValue,
@@ -75,7 +79,7 @@ var ReactDOMInput = {
       onChange: inst._wrapperState.onChange,
     });
 
-    return nativeProps;
+    return hostProps;
   },
 
   mountWrapper: function(inst, props) {
@@ -85,6 +89,8 @@ var ReactDOMInput = {
         props,
         inst._currentElement._owner
       );
+
+      var owner = inst._currentElement._owner;
 
       if (props.valueLink !== undefined && !didWarnValueLink) {
         warning(
@@ -100,32 +106,88 @@ var ReactDOMInput = {
         );
         didWarnCheckedLink = true;
       }
-      warnIfValueIsNull(props);
+      if (
+        props.checked !== undefined &&
+        props.defaultChecked !== undefined &&
+        !didWarnCheckedDefaultChecked
+      ) {
+        warning(
+          false,
+          '%s contains an input of type %s with both checked and defaultChecked props. ' +
+          'Input elements must be either controlled or uncontrolled ' +
+          '(specify either the checked prop, or the defaultChecked prop, but not ' +
+          'both). Decide between using a controlled or uncontrolled input ' +
+          'element and remove one of these props. More info: ' +
+          'https://fb.me/react-controlled-components',
+          owner && owner.getName() || 'A component',
+          props.type
+        );
+        didWarnCheckedDefaultChecked = true;
+      }
+      if (
+        props.value !== undefined &&
+        props.defaultValue !== undefined &&
+        !didWarnValueDefaultValue
+      ) {
+        warning(
+          false,
+          '%s contains an input of type %s with both value and defaultValue props. ' +
+          'Input elements must be either controlled or uncontrolled ' +
+          '(specify either the value prop, or the defaultValue prop, but not ' +
+          'both). Decide between using a controlled or uncontrolled input ' +
+          'element and remove one of these props. More info: ' +
+          'https://fb.me/react-controlled-components',
+          owner && owner.getName() || 'A component',
+          props.type
+        );
+        didWarnValueDefaultValue = true;
+      }
     }
 
     var defaultValue = props.defaultValue;
     inst._wrapperState = {
-      initialChecked: props.defaultChecked || false,
-      initialValue: defaultValue != null ? defaultValue : null,
+      initialChecked: props.checked != null ? props.checked : props.defaultChecked,
+      initialValue: props.value != null ? props.value : defaultValue,
       listeners: null,
       onChange: _handleChange.bind(inst),
     };
-  },
 
-  mountReadyWrapper: function(inst) {
-    // Can't be in mountWrapper or else server rendering leaks.
-    instancesByReactID[inst._rootNodeID] = inst;
-  },
-
-  unmountWrapper: function(inst) {
-    delete instancesByReactID[inst._rootNodeID];
+    if (__DEV__) {
+      inst._wrapperState.controlled = isControlled(props);
+    }
   },
 
   updateWrapper: function(inst) {
     var props = inst._currentElement.props;
 
     if (__DEV__) {
-      warnIfValueIsNull(props);
+      var controlled = isControlled(props);
+      var owner = inst._currentElement._owner;
+
+      if (!inst._wrapperState.controlled && controlled && !didWarnUncontrolledToControlled) {
+        warning(
+          false,
+          '%s is changing an uncontrolled input of type %s to be controlled. ' +
+          'Input elements should not switch from uncontrolled to controlled (or vice versa). ' +
+          'Decide between using a controlled or uncontrolled input ' +
+          'element for the lifetime of the component. More info: https://fb.me/react-controlled-components',
+          owner && owner.getName() || 'A component',
+          props.type
+        );
+        didWarnUncontrolledToControlled = true;
+      }
+      if (inst._wrapperState.controlled && !controlled && !didWarnControlledToUncontrolled) {
+        warning(
+          false,
+          '%s is changing a controlled input of type %s to be uncontrolled. ' +
+          'Input elements should not switch from controlled to uncontrolled (or vice versa). ' +
+          'Decide between using a controlled or uncontrolled input ' +
+          'element for the lifetime of the component. More info: https://fb.me/react-controlled-components',
+          owner && owner.getName() || 'A component',
+          props.type
+        );
+        didWarnControlledToUncontrolled = true;
+      }
     }
 
     // TODO: Shouldn't this be getChecked(props)?
@@ -138,15 +200,75 @@ var ReactDOMInput = {
       );
     }
 
+    var node = ReactDOMComponentTree.getNodeFromInstance(inst);
     var value = LinkedValueUtils.getValue(props);
     if (value != null) {
+
       // Cast `value` to a string to ensure the value is set correctly. While
       // browsers typically do this as necessary, jsdom doesn't.
-      DOMPropertyOperations.setValueForProperty(
-        ReactDOMComponentTree.getNodeFromInstance(inst),
-        'value',
-        '' + value
-      );
+      var newValue = '' + value;
+
+      // To avoid side effects (such as losing text selection), only set value if changed
+      if (newValue !== node.value) {
+        node.value = newValue;
+      }
+    } else {
+      if (props.value == null && props.defaultValue != null) {
+        node.defaultValue = '' + props.defaultValue;
+      }
+      if (props.checked == null && props.defaultChecked != null) {
+        node.defaultChecked = !!props.defaultChecked;
+      }
+    }
+  },
+
+  postMountWrapper: function(inst) {
+    var props = inst._currentElement.props;
+
+    // This is in postMount because we need access to the DOM node, which is not
+    // available until after the component has mounted.
+    var node = ReactDOMComponentTree.getNodeFromInstance(inst);
+
+    // Detach value from defaultValue. We won't do anything if we're working on
+    // submit or reset inputs as those values & defaultValues are linked. They
+    // are not resetable nodes so this operation doesn't matter and actually
+    // removes browser-default values (eg "Submit Query") when no value is
+    // provided.
+
+    switch (props.type) {
+      case 'submit':
+      case 'reset':
+        break;
+      case 'color':
+      case 'date':
+      case 'datetime':
+      case 'datetime-local':
+      case 'month':
+      case 'time':
+      case 'week':
+        // This fixes the no-show issue on iOS Safari and Android Chrome:
+        // https://github.com/facebook/react/issues/7233
+        node.value = '';
+        node.value = node.defaultValue;
+        break;
+      default:
+        node.value = node.value;
+        break;
+    }
+
+    // Normally, we'd just do `node.checked = node.checked` upon initial mount, less this bug
+    // this is needed to work around a chrome bug where setting defaultChecked
+    // will sometimes influence the value of checked (even after detachment).
+    // Reference: https://bugs.chromium.org/p/chromium/issues/detail?id=608416
+    // We need to temporarily unset name to avoid disrupting radio button groups.
+    var name = node.name;
+    if (name !== '') {
+      node.name = '';
+    }
+    node.defaultChecked = !node.defaultChecked;
+    node.defaultChecked = !node.defaultChecked;
+    if (name !== '') {
+      node.name = name;
     }
   },
 };

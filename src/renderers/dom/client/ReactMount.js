@@ -1,5 +1,5 @@
 /**
- * Copyright 2013-2015, Facebook, Inc.
+ * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
  *
  * This source code is licensed under the BSD-style license found in the
@@ -13,15 +13,16 @@
 
 var DOMLazyTree = require('DOMLazyTree');
 var DOMProperty = require('DOMProperty');
+var React = require('React');
 var ReactBrowserEventEmitter = require('ReactBrowserEventEmitter');
 var ReactCurrentOwner = require('ReactCurrentOwner');
 var ReactDOMComponentTree = require('ReactDOMComponentTree');
 var ReactDOMContainerInfo = require('ReactDOMContainerInfo');
 var ReactDOMFeatureFlags = require('ReactDOMFeatureFlags');
-var ReactElement = require('ReactElement');
 var ReactFeatureFlags = require('ReactFeatureFlags');
+var ReactInstanceMap = require('ReactInstanceMap');
+var ReactInstrumentation = require('ReactInstrumentation');
 var ReactMarkupChecksum = require('ReactMarkupChecksum');
-var ReactPerf = require('ReactPerf');
 var ReactReconciler = require('ReactReconciler');
 var ReactUpdateQueue = require('ReactUpdateQueue');
 var ReactUpdates = require('ReactUpdates');
@@ -99,7 +100,7 @@ function mountComponentIntoNode(
 ) {
   var markerName;
   if (ReactFeatureFlags.logTopLevelRenders) {
-    var wrappedElement = wrapperInstance._currentElement.props;
+    var wrappedElement = wrapperInstance._currentElement.props.child;
     var type = wrappedElement.type;
     markerName = 'React mount: ' + (
       typeof type === 'string' ? type :
@@ -113,7 +114,8 @@ function mountComponentIntoNode(
     transaction,
     null,
     ReactDOMContainerInfo(wrapperInstance, container),
-    context
+    context,
+    0 /* parentDebugID */
   );
 
   if (markerName) {
@@ -168,8 +170,14 @@ function batchedMountComponentIntoNode(
  * @internal
  * @see {ReactMount.unmountComponentAtNode}
  */
-function unmountComponentFromNode(instance, container) {
-  ReactReconciler.unmountComponent(instance);
+function unmountComponentFromNode(instance, container, safely) {
+  if (__DEV__) {
+    ReactInstrumentation.debugTool.onBeginFlush();
+  }
+  ReactReconciler.unmountComponent(instance, safely);
+  if (__DEV__) {
+    ReactInstrumentation.debugTool.onEndFlush();
+  }
 
   if (container.nodeType === DOC_NODE_TYPE) {
     container = container.documentElement;
@@ -195,23 +203,62 @@ function hasNonRootReactChild(container) {
   var rootEl = getReactRootElementInContainer(container);
   if (rootEl) {
     var inst = ReactDOMComponentTree.getInstanceFromNode(rootEl);
-    return !!(inst && inst._nativeParent);
+    return !!(inst && inst._hostParent);
   }
 }
 
-function getNativeRootInstanceInContainer(container) {
+/**
+ * True if the supplied DOM node is a React DOM element and
+ * it has been rendered by another copy of React.
+ *
+ * @param {?DOMElement} node The candidate DOM node.
+ * @return {boolean} True if the DOM has been rendered by another copy of React
+ * @internal
+ */
+function nodeIsRenderedByOtherInstance(container) {
   var rootEl = getReactRootElementInContainer(container);
-  var prevNativeInstance =
+  return !!(rootEl && isReactNode(rootEl) && !ReactDOMComponentTree.getInstanceFromNode(rootEl));
+}
+
+/**
+ * True if the supplied DOM node is a valid node element.
+ *
+ * @param {?DOMElement} node The candidate DOM node.
+ * @return {boolean} True if the DOM is a valid DOM node.
+ * @internal
+ */
+function isValidContainer(node) {
+  return !!(node && (
+    node.nodeType === ELEMENT_NODE_TYPE ||
+    node.nodeType === DOC_NODE_TYPE ||
+    node.nodeType === DOCUMENT_FRAGMENT_NODE_TYPE
+  ));
+}
+
+/**
+ * True if the supplied DOM node is a valid React node element.
+ *
+ * @param {?DOMElement} node The candidate DOM node.
+ * @return {boolean} True if the DOM is a valid React DOM node.
+ * @internal
+ */
+function isReactNode(node) {
+  return isValidContainer(node) && (node.hasAttribute(ROOT_ATTR_NAME) || node.hasAttribute(ATTR_NAME));
+}
+
+function getHostRootInstanceInContainer(container) {
+  var rootEl = getReactRootElementInContainer(container);
+  var prevHostInstance =
     rootEl && ReactDOMComponentTree.getInstanceFromNode(rootEl);
   return (
-    prevNativeInstance && !prevNativeInstance._nativeParent ?
-    prevNativeInstance : null
+    prevHostInstance && !prevHostInstance._hostParent ?
+    prevHostInstance : null
   );
 }
 
 function getTopLevelWrapperInContainer(container) {
-  var root = getNativeRootInstanceInContainer(container);
-  return root ? root._nativeContainerInfo._topLevelWrapper : null;
+  var root = getHostRootInstanceInContainer(container);
+  return root ? root._hostContainerInfo._topLevelWrapper : null;
 }
 
 /**
@@ -228,9 +275,9 @@ if (__DEV__) {
   TopLevelWrapper.displayName = 'TopLevelWrapper';
 }
 TopLevelWrapper.prototype.render = function() {
-  // this.props is actually a ReactElement
-  return this.props;
+  return this.props.child;
 };
+TopLevelWrapper.isReactTopLevelWrapper = true;
 
 /**
  * Mounting is the process of initializing a React component by creating its
@@ -281,10 +328,11 @@ var ReactMount = {
   _updateRootComponent: function(
       prevComponent,
       nextElement,
+      nextContext,
       container,
       callback) {
     ReactMount.scrollMonitor(container, function() {
-      ReactUpdateQueue.enqueueElementInternal(prevComponent, nextElement);
+      ReactUpdateQueue.enqueueElementInternal(prevComponent, nextElement, nextContext);
       if (callback) {
         ReactUpdateQueue.enqueueCallbackInternal(prevComponent, callback);
       }
@@ -294,7 +342,7 @@ var ReactMount = {
   },
 
   /**
-   * Render a new component into the DOM. Hooked by devtools!
+   * Render a new component into the DOM. Hooked by hooks!
    *
    * @param {ReactElement} nextElement element to render
    * @param {DOMElement} container container to render into
@@ -321,16 +369,12 @@ var ReactMount = {
     );
 
     invariant(
-      container && (
-        container.nodeType === ELEMENT_NODE_TYPE ||
-        container.nodeType === DOC_NODE_TYPE ||
-        container.nodeType === DOCUMENT_FRAGMENT_NODE_TYPE
-      ),
+      isValidContainer(container),
       '_registerComponent(...): Target container is not a DOM element.'
     );
 
     ReactBrowserEventEmitter.ensureScrollValueMonitoring();
-    var componentInstance = instantiateReactComponent(nextElement);
+    var componentInstance = instantiateReactComponent(nextElement, false);
 
     // The initial render is synchronous but any updates that happen during
     // rendering, in componentWillMount or componentDidMount, will be batched
@@ -365,7 +409,7 @@ var ReactMount = {
    */
   renderSubtreeIntoContainer: function(parentComponent, nextElement, container, callback) {
     invariant(
-      parentComponent != null && parentComponent._reactInternalInstance != null,
+      parentComponent != null && ReactInstanceMap.has(parentComponent),
       'parentComponent must be a valid React Component'
     );
     return ReactMount._renderSubtreeIntoContainer(
@@ -377,16 +421,17 @@ var ReactMount = {
   },
 
   _renderSubtreeIntoContainer: function(parentComponent, nextElement, container, callback) {
+    ReactUpdateQueue.validateCallback(callback, 'ReactDOM.render');
     invariant(
-      ReactElement.isValidElement(nextElement),
+      React.isValidElement(nextElement),
       'ReactDOM.render(): Invalid component element.%s',
       (
         typeof nextElement === 'string' ?
-          ' Instead of passing an element string, make sure to instantiate ' +
-          'it by passing it to React.createElement.' :
+          ' Instead of passing a string like \'div\', pass ' +
+          'React.createElement(\'div\') or <div />.' :
         typeof nextElement === 'function' ?
-          ' Instead of passing a component class, make sure to instantiate ' +
-          'it by passing it to React.createElement.' :
+          ' Instead of passing a class like Foo, pass ' +
+          'React.createElement(Foo) or <Foo />.' :
         // Check if it quacks like an element
         nextElement != null && nextElement.props !== undefined ?
           ' This may be caused by unintentionally loading two independent ' +
@@ -405,21 +450,24 @@ var ReactMount = {
       'for your app.'
     );
 
-    var nextWrappedElement = new ReactElement(
+    var nextWrappedElement = React.createElement(
       TopLevelWrapper,
-      null,
-      null,
-      null,
-      null,
-      null,
-      nextElement
+      { child: nextElement }
     );
+
+    var nextContext;
+    if (parentComponent) {
+      var parentInst = ReactInstanceMap.get(parentComponent);
+      nextContext = parentInst._processChildContext(parentInst._context);
+    } else {
+      nextContext = emptyObject;
+    }
 
     var prevComponent = getTopLevelWrapperInContainer(container);
 
     if (prevComponent) {
       var prevWrappedElement = prevComponent._currentElement;
-      var prevElement = prevWrappedElement.props;
+      var prevElement = prevWrappedElement.props.child;
       if (shouldUpdateReactComponent(prevElement, nextElement)) {
         var publicInst = prevComponent._renderedComponent.getPublicInstance();
         var updatedCallback = callback && function() {
@@ -428,6 +476,7 @@ var ReactMount = {
         ReactMount._updateRootComponent(
           prevComponent,
           nextWrappedElement,
+          nextContext,
           container,
           updatedCallback
         );
@@ -476,11 +525,7 @@ var ReactMount = {
       nextWrappedElement,
       container,
       shouldReuseMarkup,
-      parentComponent != null ?
-        parentComponent._reactInternalInstance._processChildContext(
-          parentComponent._reactInternalInstance._context
-        ) :
-        emptyObject
+      nextContext
     )._renderedComponent.getPublicInstance();
     if (callback) {
       callback.call(component);
@@ -491,6 +536,7 @@ var ReactMount = {
 
   /**
    * Renders a React component into the DOM in the supplied `container`.
+   * See https://facebook.github.io/react/docs/top-level-api.html#reactdom.render
    *
    * If the React component was previously rendered into `container`, this will
    * perform an update on it and only mutate the DOM as necessary to reflect the
@@ -507,6 +553,7 @@ var ReactMount = {
 
   /**
    * Unmounts and destroys the React component rendered in the `container`.
+   * See https://facebook.github.io/react/docs/top-level-api.html#reactdom.unmountcomponentatnode
    *
    * @param {DOMElement} container DOM element containing a React component.
    * @return {boolean} True if a component was found in and unmounted from
@@ -528,13 +575,17 @@ var ReactMount = {
     );
 
     invariant(
-      container && (
-        container.nodeType === ELEMENT_NODE_TYPE ||
-        container.nodeType === DOC_NODE_TYPE ||
-        container.nodeType === DOCUMENT_FRAGMENT_NODE_TYPE
-      ),
+      isValidContainer(container),
       'unmountComponentAtNode(...): Target container is not a DOM element.'
     );
+
+    if (__DEV__) {
+      warning(
+        !nodeIsRenderedByOtherInstance(container),
+        'unmountComponentAtNode(): The node you\'re attempting to unmount ' +
+        'was rendered by another copy of React.'
+      );
+    }
 
     var prevComponent = getTopLevelWrapperInContainer(container);
     if (!prevComponent) {
@@ -567,7 +618,8 @@ var ReactMount = {
     ReactUpdates.batchedUpdates(
       unmountComponentFromNode,
       prevComponent,
-      container
+      container,
+      false
     );
     return true;
   },
@@ -580,11 +632,7 @@ var ReactMount = {
     transaction
   ) {
     invariant(
-      container && (
-        container.nodeType === ELEMENT_NODE_TYPE ||
-        container.nodeType === DOC_NODE_TYPE ||
-        container.nodeType === DOCUMENT_FRAGMENT_NODE_TYPE
-      ),
+      isValidContainer(container),
       'mountComponentIntoNode(...): Target container is not valid.'
     );
 
@@ -677,12 +725,18 @@ var ReactMount = {
       setInnerHTML(container, markup);
       ReactDOMComponentTree.precacheNode(instance, container.firstChild);
     }
+
+    if (__DEV__) {
+      var hostNode = ReactDOMComponentTree.getInstanceFromNode(container.firstChild);
+      if (hostNode._debugID !== 0) {
+        ReactInstrumentation.debugTool.onHostOperation(
+          hostNode._debugID,
+          'mount',
+          markup.toString()
+        );
+      }
+    }
   },
 };
-
-ReactPerf.measureMethods(ReactMount, 'ReactMount', {
-  _renderNewRootComponent: '_renderNewRootComponent',
-  _mountImageIntoNode: '_mountImageIntoNode',
-});
 
 module.exports = ReactMount;

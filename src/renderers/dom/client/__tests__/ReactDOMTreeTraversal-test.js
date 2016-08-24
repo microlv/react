@@ -1,5 +1,5 @@
 /**
- * Copyright 2013-2015, Facebook, Inc.
+ * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
  *
  * This source code is licensed under the BSD-style license found in the
@@ -21,19 +21,19 @@ var ReactTestUtils = require('ReactTestUtils');
 var ARG = {arg: true};
 var ARG2 = {arg2: true};
 
-var ChildComponent = React.createClass({
-  render: function() {
+class ChildComponent extends React.Component {
+  render() {
     return (
       <div ref="DIV">
         <div ref="DIV_1" />
         <div ref="DIV_2" />
       </div>
     );
-  },
-});
+  }
+}
 
-var ParentComponent = React.createClass({
-  render: function() {
+class ParentComponent extends React.Component {
+  render() {
     return (
       <div ref="P">
         <div ref="P_P1">
@@ -43,8 +43,8 @@ var ParentComponent = React.createClass({
         <div ref="P_OneOff" />
       </div>
     );
-  },
-});
+  }
+}
 
 function renderParentIntoDocument() {
   return ReactTestUtils.renderIntoDocument(<ParentComponent />);

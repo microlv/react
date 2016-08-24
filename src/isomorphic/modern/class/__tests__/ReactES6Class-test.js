@@ -1,5 +1,5 @@
 /**
- * Copyright 2013-2015, Facebook, Inc.
+ * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
  *
  * This source code is licensed under the BSD-style license found in the
@@ -61,12 +61,10 @@ describe('ReactES6Class', function() {
     class Foo extends React.Component { }
     expect(() => ReactDOM.render(<Foo />, container)).toThrow();
 
-    expect(console.error.calls.length).toBe(1);
-    expect(console.error.argsForCall[0][0]).toBe(
+    expect(console.error.calls.count()).toBe(1);
+    expect(console.error.calls.argsFor(0)[0]).toBe(
       'Warning: Foo(...): No `render` method found on the returned component ' +
-      'instance: you may have forgotten to define `render`, returned ' +
-      'null/false from a stateless component, or tried to render an element ' +
-      'whose type is a function that isn\'t a React component.'
+      'instance: you may have forgotten to define `render`.'
     );
   });
 
@@ -175,7 +173,7 @@ describe('ReactES6Class', function() {
           return <span />;
         }
       }
-      expect(() => test(<Foo />, 'span', '')).toThrow(
+      expect(() => test(<Foo />, 'span', '')).toThrowError(
         'Foo.state: must be set to an object or null'
       );
     });
@@ -341,17 +339,17 @@ describe('ReactES6Class', function() {
     test(<Foo />, 'SPAN', 'foo');
     expect(getInitialStateWasCalled).toBe(false);
     expect(getDefaultPropsWasCalled).toBe(false);
-    expect(console.error.calls.length).toBe(4);
-    expect(console.error.argsForCall[0][0]).toContain(
+    expect(console.error.calls.count()).toBe(4);
+    expect(console.error.calls.argsFor(0)[0]).toContain(
       'getInitialState was defined on Foo, a plain JavaScript class.'
     );
-    expect(console.error.argsForCall[1][0]).toContain(
+    expect(console.error.calls.argsFor(1)[0]).toContain(
       'getDefaultProps was defined on Foo, a plain JavaScript class.'
     );
-    expect(console.error.argsForCall[2][0]).toContain(
+    expect(console.error.calls.argsFor(2)[0]).toContain(
       'propTypes was defined as an instance property on Foo.'
     );
-    expect(console.error.argsForCall[3][0]).toContain(
+    expect(console.error.calls.argsFor(3)[0]).toContain(
       'contextTypes was defined as an instance property on Foo.'
     );
   });
@@ -369,8 +367,8 @@ describe('ReactES6Class', function() {
     }
     test(<NamedComponent />, 'SPAN', 'foo');
 
-    expect(console.error.calls.length).toBe(1);
-    expect(console.error.argsForCall[0][0]).toBe(
+    expect(console.error.calls.count()).toBe(1);
+    expect(console.error.calls.argsFor(0)[0]).toBe(
       'Warning: ' +
       'NamedComponent has a method called componentShouldUpdate(). Did you ' +
       'mean shouldComponentUpdate()? The name is phrased as a question ' +
@@ -391,8 +389,8 @@ describe('ReactES6Class', function() {
     }
     test(<NamedComponent />, 'SPAN', 'foo');
 
-    expect(console.error.calls.length).toBe(1);
-    expect(console.error.argsForCall[0][0]).toBe(
+    expect(console.error.calls.count()).toBe(1);
+    expect(console.error.calls.argsFor(0)[0]).toBe(
       'Warning: ' +
       'NamedComponent has a method called componentWillRecieveProps(). Did ' +
       'you mean componentWillReceiveProps()?'
@@ -402,20 +400,13 @@ describe('ReactES6Class', function() {
   it('should throw AND warn when trying to access classic APIs', function() {
     spyOn(console, 'error');
     var instance = test(<Inner name="foo" />, 'DIV', 'foo');
-    expect(() => instance.getDOMNode()).toThrow();
     expect(() => instance.replaceState({})).toThrow();
     expect(() => instance.isMounted()).toThrow();
-    expect(() => instance.setProps({name: 'bar'})).toThrow();
-    expect(() => instance.replaceProps({name: 'bar'})).toThrow();
-    expect(console.error.calls.length).toBe(3);
-    expect(console.error.argsForCall[0][0]).toContain(
-      'getDOMNode(...) is deprecated in plain JavaScript React classes. ' +
-      'Use ReactDOM.findDOMNode(component) instead.'
-    );
-    expect(console.error.argsForCall[1][0]).toContain(
+    expect(console.error.calls.count()).toBe(2);
+    expect(console.error.calls.argsFor(0)[0]).toContain(
       'replaceState(...) is deprecated in plain JavaScript React classes'
     );
-    expect(console.error.argsForCall[2][0]).toContain(
+    expect(console.error.calls.argsFor(1)[0]).toContain(
       'isMounted(...) is deprecated in plain JavaScript React classes'
     );
   });

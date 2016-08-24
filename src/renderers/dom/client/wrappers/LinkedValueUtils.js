@@ -1,5 +1,5 @@
 /**
- * Copyright 2013-2015, Facebook, Inc.
+ * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
  *
  * This source code is licensed under the BSD-style license found in the
@@ -11,8 +11,9 @@
 
 'use strict';
 
-var ReactPropTypes = require('ReactPropTypes');
+var React = require('React');
 var ReactPropTypeLocations = require('ReactPropTypeLocations');
+var ReactPropTypesSecret = require('ReactPropTypesSecret');
 
 var invariant = require('invariant');
 var warning = require('warning');
@@ -83,7 +84,7 @@ var propTypes = {
       'set either `onChange` or `readOnly`.'
     );
   },
-  onChange: ReactPropTypes.func,
+  onChange: React.PropTypes.func,
 };
 
 var loggedTypeFailures = {};
@@ -109,7 +110,9 @@ var LinkedValueUtils = {
           props,
           propName,
           tagName,
-          ReactPropTypeLocations.prop
+          ReactPropTypeLocations.prop,
+          null,
+          ReactPropTypesSecret
         );
       }
       if (error instanceof Error && !(error.message in loggedTypeFailures)) {

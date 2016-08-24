@@ -1,5 +1,5 @@
 /**
- * Copyright 2013-2015, Facebook, Inc.
+ * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
  *
  * This source code is licensed under the BSD-style license found in the
@@ -14,11 +14,21 @@
 var DOMLazyTree = require('DOMLazyTree');
 var Danger = require('Danger');
 var ReactMultiChildUpdateTypes = require('ReactMultiChildUpdateTypes');
-var ReactPerf = require('ReactPerf');
+var ReactDOMComponentTree = require('ReactDOMComponentTree');
+var ReactInstrumentation = require('ReactInstrumentation');
 
+var createMicrosoftUnsafeLocalFunction = require('createMicrosoftUnsafeLocalFunction');
 var setInnerHTML = require('setInnerHTML');
 var setTextContent = require('setTextContent');
-var invariant = require('invariant');
+
+function getNodeAfter(parentNode, node) {
+  // Special case for text components, which return [open, close] comments
+  // from getHostNode.
+  if (Array.isArray(node)) {
+    node = node[1];
+  }
+  return node ? node.nextSibling : parentNode.firstChild;
+}
 
 /**
  * Inserts `childNode` as a child of `parentNode` at the `index`.
@@ -28,28 +38,120 @@ var invariant = require('invariant');
  * @param {number} index Index at which to insert the child.
  * @internal
  */
-function insertChildAt(parentNode, childNode, index) {
-  // We can rely exclusively on `insertBefore(node, null)` instead of also using
-  // `appendChild(node)`. (Using `undefined` is not allowed by all browsers so
-  // we are careful to use `null`.)
+var insertChildAt = createMicrosoftUnsafeLocalFunction(
+  function(parentNode, childNode, referenceNode) {
+    // We rely exclusively on `insertBefore(node, null)` instead of also using
+    // `appendChild(node)`. (Using `undefined` is not allowed by all browsers so
+    // we are careful to use `null`.)
+    parentNode.insertBefore(childNode, referenceNode);
+  }
+);
 
-  // In Safari, .childNodes[index] can return a DOM node with id={index} so we
-  // use .item() instead which is immune to this bug. (See #3560.) In contrast
-  // to the spec, IE8 throws an error if index is larger than the list size.
-  var referenceNode =
-    index < parentNode.childNodes.length ?
-    parentNode.childNodes.item(index) : null;
-
-  parentNode.insertBefore(childNode, referenceNode);
+function insertLazyTreeChildAt(parentNode, childTree, referenceNode) {
+  DOMLazyTree.insertTreeBefore(parentNode, childTree, referenceNode);
 }
 
-function insertLazyTreeChildAt(parentNode, childTree, index) {
-  // See above.
-  var referenceNode =
-    index < parentNode.childNodes.length ?
-    parentNode.childNodes.item(index) : null;
+function moveChild(parentNode, childNode, referenceNode) {
+  if (Array.isArray(childNode)) {
+    moveDelimitedText(parentNode, childNode[0], childNode[1], referenceNode);
+  } else {
+    insertChildAt(parentNode, childNode, referenceNode);
+  }
+}
 
-  DOMLazyTree.insertTreeBefore(parentNode, childTree, referenceNode);
+function removeChild(parentNode, childNode) {
+  if (Array.isArray(childNode)) {
+    var closingComment = childNode[1];
+    childNode = childNode[0];
+    removeDelimitedText(parentNode, childNode, closingComment);
+    parentNode.removeChild(closingComment);
+  }
+  parentNode.removeChild(childNode);
+}
+
+function moveDelimitedText(
+  parentNode,
+  openingComment,
+  closingComment,
+  referenceNode
+) {
+  var node = openingComment;
+  while (true) {
+    var nextNode = node.nextSibling;
+    insertChildAt(parentNode, node, referenceNode);
+    if (node === closingComment) {
+      break;
+    }
+    node = nextNode;
+  }
+}
+
+function removeDelimitedText(parentNode, startNode, closingComment) {
+  while (true) {
+    var node = startNode.nextSibling;
+    if (node === closingComment) {
+      // The closing comment is removed by ReactMultiChild.
+      break;
+    } else {
+      parentNode.removeChild(node);
+    }
+  }
+}
+
+function replaceDelimitedText(openingComment, closingComment, stringText) {
+  var parentNode = openingComment.parentNode;
+  var nodeAfterComment = openingComment.nextSibling;
+  if (nodeAfterComment === closingComment) {
+    // There are no text nodes between the opening and closing comments; insert
+    // a new one if stringText isn't empty.
+    if (stringText) {
+      insertChildAt(
+        parentNode,
+        document.createTextNode(stringText),
+        nodeAfterComment
+      );
+    }
+  } else {
+    if (stringText) {
+      // Set the text content of the first node after the opening comment, and
+      // remove all following nodes up until the closing comment.
+      setTextContent(nodeAfterComment, stringText);
+      removeDelimitedText(parentNode, nodeAfterComment, closingComment);
+    } else {
+      removeDelimitedText(parentNode, openingComment, closingComment);
+    }
+  }
+
+  if (__DEV__) {
+    ReactInstrumentation.debugTool.onHostOperation(
+      ReactDOMComponentTree.getInstanceFromNode(openingComment)._debugID,
+      'replace text',
+      stringText
+    );
+  }
+}
+
+var dangerouslyReplaceNodeWithMarkup = Danger.dangerouslyReplaceNodeWithMarkup;
+if (__DEV__) {
+  dangerouslyReplaceNodeWithMarkup = function(oldChild, markup, prevInstance) {
+    Danger.dangerouslyReplaceNodeWithMarkup(oldChild, markup);
+    if (prevInstance._debugID !== 0) {
+      ReactInstrumentation.debugTool.onHostOperation(
+        prevInstance._debugID,
+        'replace with',
+        markup.toString()
+      );
+    } else {
+      var nextInstance = ReactDOMComponentTree.getInstanceFromNode(markup.node);
+      if (nextInstance._debugID !== 0) {
+        ReactInstrumentation.debugTool.onHostOperation(
+          nextInstance._debugID,
+          'mount',
+          markup.toString()
+        );
+      }
+    }
+  };
 }
 
 /**
@@ -57,9 +159,9 @@ function insertLazyTreeChildAt(parentNode, childTree, index) {
  */
 var DOMChildrenOperations = {
 
-  dangerouslyReplaceNodeWithMarkup: Danger.dangerouslyReplaceNodeWithMarkup,
+  dangerouslyReplaceNodeWithMarkup: dangerouslyReplaceNodeWithMarkup,
 
-  updateTextContent: setTextContent,
+  replaceDelimitedText: replaceDelimitedText,
 
   /**
    * Updates a component's children by processing a series of updates. The
@@ -69,106 +171,82 @@ var DOMChildrenOperations = {
    * @internal
    */
   processUpdates: function(parentNode, updates) {
-    var update;
-    // Mapping from parent IDs to initial child orderings.
-    var initialChildren = null;
-    // List of children that will be moved or removed.
-    var updatedChildren = null;
-
-    var markupList = null;
-
-    for (var i = 0; i < updates.length; i++) {
-      update = updates[i];
-      if (update.type === ReactMultiChildUpdateTypes.MOVE_EXISTING ||
-          update.type === ReactMultiChildUpdateTypes.REMOVE_NODE) {
-        var updatedIndex = update.fromIndex;
-        var updatedChild = parentNode.childNodes[updatedIndex];
-
-        invariant(
-          updatedChild,
-          'processUpdates(): Unable to find child %s of element %s. This ' +
-          'probably means the DOM was unexpectedly mutated (e.g., by the ' +
-          'browser), usually due to forgetting a <tbody> when using tables, ' +
-          'nesting tags like <form>, <p>, or <a>, or using non-SVG elements ' +
-          'in an <svg> parent.',
-          updatedIndex,
-          parentNode,
-        );
-
-        initialChildren = initialChildren || {};
-        initialChildren[updatedIndex] = updatedChild;
-
-        updatedChildren = updatedChildren || [];
-        updatedChildren.push(updatedChild);
-      } else if (update.type === ReactMultiChildUpdateTypes.INSERT_MARKUP) {
-        // Replace each HTML string with an index into the markup list
-        if (typeof update.content === 'string') {
-          markupList = markupList || [];
-          update.content = markupList.push(update.markup);
-        }
-      }
-    }
-
-    var renderedMarkup;
-    if (markupList) {
-      renderedMarkup = Danger.dangerouslyRenderMarkup(markupList);
-    }
-
-    // Remove updated children first so that `toIndex` is consistent.
-    if (updatedChildren) {
-      for (var j = 0; j < updatedChildren.length; j++) {
-        parentNode.removeChild(updatedChildren[j]);
-      }
+    if (__DEV__) {
+      var parentNodeDebugID =
+        ReactDOMComponentTree.getInstanceFromNode(parentNode)._debugID;
     }
 
     for (var k = 0; k < updates.length; k++) {
-      update = updates[k];
+      var update = updates[k];
       switch (update.type) {
         case ReactMultiChildUpdateTypes.INSERT_MARKUP:
-          if (renderedMarkup) {
-            insertChildAt(
-              parentNode,
-              renderedMarkup[update.content],
-              update.toIndex
-            );
-          } else {
-            insertLazyTreeChildAt(
-              parentNode,
-              update.content,
-              update.toIndex
+          insertLazyTreeChildAt(
+            parentNode,
+            update.content,
+            getNodeAfter(parentNode, update.afterNode)
+          );
+          if (__DEV__) {
+            ReactInstrumentation.debugTool.onHostOperation(
+              parentNodeDebugID,
+              'insert child',
+              {toIndex: update.toIndex, content: update.content.toString()}
             );
           }
           break;
         case ReactMultiChildUpdateTypes.MOVE_EXISTING:
-          insertChildAt(
+          moveChild(
             parentNode,
-            initialChildren[update.fromIndex],
-            update.toIndex
+            update.fromNode,
+            getNodeAfter(parentNode, update.afterNode)
           );
+          if (__DEV__) {
+            ReactInstrumentation.debugTool.onHostOperation(
+              parentNodeDebugID,
+              'move child',
+              {fromIndex: update.fromIndex, toIndex: update.toIndex}
+            );
+          }
           break;
         case ReactMultiChildUpdateTypes.SET_MARKUP:
           setInnerHTML(
             parentNode,
             update.content
           );
+          if (__DEV__) {
+            ReactInstrumentation.debugTool.onHostOperation(
+              parentNodeDebugID,
+              'replace children',
+              update.content.toString()
+            );
+          }
           break;
         case ReactMultiChildUpdateTypes.TEXT_CONTENT:
           setTextContent(
             parentNode,
             update.content
           );
+          if (__DEV__) {
+            ReactInstrumentation.debugTool.onHostOperation(
+              parentNodeDebugID,
+              'replace text',
+              update.content.toString()
+            );
+          }
           break;
         case ReactMultiChildUpdateTypes.REMOVE_NODE:
-          // Already removed by the for-loop above.
+          removeChild(parentNode, update.fromNode);
+          if (__DEV__) {
+            ReactInstrumentation.debugTool.onHostOperation(
+              parentNodeDebugID,
+              'remove child',
+              {fromIndex: update.fromIndex}
+            );
+          }
           break;
       }
     }
   },
 
 };
-
-ReactPerf.measureMethods(DOMChildrenOperations, 'DOMChildrenOperations', {
-  updateTextContent: 'updateTextContent',
-});
 
 module.exports = DOMChildrenOperations;

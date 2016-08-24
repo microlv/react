@@ -2,7 +2,7 @@
 id: use-react-with-other-libraries
 title: Use React with Other Libraries
 layout: tips
-permalink: use-react-with-other-libraries.html
+permalink: tips/use-react-with-other-libraries.html
 prev: children-undefined.html
 next: dangerously-set-inner-html.html
 ---
@@ -16,7 +16,7 @@ var App = React.createClass({
   },
 
   componentDidMount: function() {
-    $(ReactDOM.findDOMNode(this.refs.placeholder)).append($('<span />'));
+    $(this.refs.placeholder).append($('<span />'));
   },
 
   componentWillUnmount: function() {

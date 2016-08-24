@@ -1,5 +1,5 @@
 /**
- * Copyright 2013-2015, Facebook, Inc.
+ * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
  *
  * This source code is licensed under the BSD-style license found in the
@@ -42,11 +42,11 @@ describe('SelectEventPlugin', function() {
   });
 
   it('should skip extraction if no listeners are present', function() {
-    var WithoutSelect = React.createClass({
-      render: function() {
+    class WithoutSelect extends React.Component {
+      render() {
         return <input type="text" />;
-      },
-    });
+      }
+    }
 
     var rendered = ReactTestUtils.renderIntoDocument(<WithoutSelect />);
     var node = ReactDOM.findDOMNode(rendered);
@@ -60,13 +60,13 @@ describe('SelectEventPlugin', function() {
   });
 
   it('should extract if an `onSelect` listener is present', function() {
-    var WithSelect = React.createClass({
-      render: function() {
+    class WithSelect extends React.Component {
+      render() {
         return <input type="text" onSelect={this.props.onSelect} />;
-      },
-    });
+      }
+    }
 
-    var cb = jest.genMockFn();
+    var cb = jest.fn();
 
     var rendered = ReactTestUtils.renderIntoDocument(
       <WithSelect onSelect={cb} />

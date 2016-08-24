@@ -1,7 +1,7 @@
 ---
 id: events-ko-KR
 title: 이벤트 시스템
-permalink: events-ko-KR.html
+permalink: docs/events-ko-KR.html
 prev: tags-and-attributes-ko-KR.html
 next: dom-differences-ko-KR.html
 ---
@@ -139,7 +139,6 @@ DOMEventTarget relatedTarget
 
 이 포커스 이벤트는 폼 엘리먼트뿐만 아니라 모든 React DOM 엘리먼트에서 작동합니다.
 
-<a name="form-events"></a>
 ### 폼 이벤트
 
 이벤트 이름:

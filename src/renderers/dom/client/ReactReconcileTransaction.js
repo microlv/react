@@ -1,5 +1,5 @@
 /**
- * Copyright 2013-2015, Facebook, Inc.
+ * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
  *
  * This source code is licensed under the BSD-style license found in the
@@ -15,9 +15,10 @@ var CallbackQueue = require('CallbackQueue');
 var PooledClass = require('PooledClass');
 var ReactBrowserEventEmitter = require('ReactBrowserEventEmitter');
 var ReactInputSelection = require('ReactInputSelection');
+var ReactInstrumentation = require('ReactInstrumentation');
 var Transaction = require('Transaction');
+var ReactUpdateQueue = require('ReactUpdateQueue');
 
-var assign = require('Object.assign');
 
 /**
  * Ensures that, when possible, the selection range (currently selected text
@@ -91,6 +92,13 @@ var TRANSACTION_WRAPPERS = [
   ON_DOM_READY_QUEUEING,
 ];
 
+if (__DEV__) {
+  TRANSACTION_WRAPPERS.push({
+    initialize: ReactInstrumentation.debugTool.onBeginFlush,
+    close: ReactInstrumentation.debugTool.onEndFlush,
+  });
+}
+
 /**
  * Currently:
  * - The order that these are listed in the transaction is critical:
@@ -111,7 +119,7 @@ function ReactReconcileTransaction(useCreateElement) {
   // `ReactServerRendering`), but server-side uses
   // `ReactServerRenderingTransaction` instead. This option is here so that it's
   // accessible and defaults to false when `ReactDOMComponent` and
-  // `ReactTextComponent` checks it in `mountComponent`.`
+  // `ReactDOMTextComponent` checks it in `mountComponent`.`
   this.renderToStaticMarkup = false;
   this.reactMountReady = CallbackQueue.getPooled(null);
   this.useCreateElement = useCreateElement;
@@ -134,6 +142,13 @@ var Mixin = {
    */
   getReactMountReady: function() {
     return this.reactMountReady;
+  },
+
+  /**
+   * @return {object} The queue to collect React async events.
+   */
+  getUpdateQueue: function() {
+    return ReactUpdateQueue;
   },
 
   /**
@@ -160,7 +175,7 @@ var Mixin = {
 };
 
 
-assign(ReactReconcileTransaction.prototype, Transaction.Mixin, Mixin);
+Object.assign(ReactReconcileTransaction.prototype, Transaction.Mixin, Mixin);
 
 PooledClass.addPoolingTo(ReactReconcileTransaction);
 

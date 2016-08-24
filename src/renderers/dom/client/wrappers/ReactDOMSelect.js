@@ -1,5 +1,5 @@
 /**
- * Copyright 2013-2015, Facebook, Inc.
+ * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
  *
  * This source code is licensed under the BSD-style license found in the
@@ -11,15 +11,15 @@
 
 'use strict';
 
+var DisabledInputUtils = require('DisabledInputUtils');
 var LinkedValueUtils = require('LinkedValueUtils');
 var ReactDOMComponentTree = require('ReactDOMComponentTree');
 var ReactUpdates = require('ReactUpdates');
 
-var assign = require('Object.assign');
 var warning = require('warning');
 
 var didWarnValueLink = false;
-var didWarnValueNull = false;
+var didWarnValueDefaultValue = false;
 
 function updateOptionsIfPendingUpdateAndMounted() {
   if (this._rootNodeID && this._wrapperState.pendingUpdate) {
@@ -42,19 +42,6 @@ function getDeclarationErrorAddendum(owner) {
     }
   }
   return '';
-}
-
-function warnIfValueIsNull(props) {
-  if (props != null && props.value === null && !didWarnValueNull) {
-    warning(
-      false,
-      '`value` prop on `select` should not be null. ' +
-      'Consider using the empty string to clear the component or `undefined` ' +
-      'for uncontrolled components.'
-    );
-
-    didWarnValueNull = true;
-  }
 }
 
 var valuePropNames = ['value', 'defaultValue'];
@@ -84,17 +71,18 @@ function checkSelectPropTypes(inst, props) {
     if (props[propName] == null) {
       continue;
     }
-    if (props.multiple) {
+    var isArray = Array.isArray(props[propName]);
+    if (props.multiple && !isArray) {
       warning(
-        Array.isArray(props[propName]),
+        false,
         'The `%s` prop supplied to <select> must be an array if ' +
         '`multiple` is true.%s',
         propName,
         getDeclarationErrorAddendum(owner)
       );
-    } else {
+    } else if (!props.multiple && isArray) {
       warning(
-        !Array.isArray(props[propName]),
+        false,
         'The `%s` prop supplied to <select> must be a scalar ' +
         'value if `multiple` is false.%s',
         propName,
@@ -142,7 +130,7 @@ function updateOptions(inst, multiple, propValue) {
 }
 
 /**
- * Implements a <select> native component that allows optionally setting the
+ * Implements a <select> host component that allows optionally setting the
  * props `value` and `defaultValue`. If `multiple` is false, the prop must be a
  * stringable. If `multiple` is true, the prop must be an array of stringables.
  *
@@ -157,8 +145,8 @@ function updateOptions(inst, multiple, propValue) {
  * selected.
  */
 var ReactDOMSelect = {
-  getNativeProps: function(inst, props) {
-    return assign({}, props, {
+  getHostProps: function(inst, props) {
+    return Object.assign({}, DisabledInputUtils.getHostProps(inst, props), {
       onChange: inst._wrapperState.onChange,
       value: undefined,
     });
@@ -167,7 +155,6 @@ var ReactDOMSelect = {
   mountWrapper: function(inst, props) {
     if (__DEV__) {
       checkSelectPropTypes(inst, props);
-      warnIfValueIsNull(props);
     }
 
     var value = LinkedValueUtils.getValue(props);
@@ -178,6 +165,22 @@ var ReactDOMSelect = {
       onChange: _handleChange.bind(inst),
       wasMultiple: Boolean(props.multiple),
     };
+
+    if (
+      props.value !== undefined &&
+      props.defaultValue !== undefined &&
+      !didWarnValueDefaultValue
+    ) {
+      warning(
+        false,
+        'Select elements must be either controlled or uncontrolled ' +
+        '(specify either the value prop, or the defaultValue prop, but not ' +
+        'both). Decide between using a controlled or uncontrolled select ' +
+        'element and remove one of these props. More info: ' +
+        'https://fb.me/react-controlled-components'
+      );
+      didWarnValueDefaultValue = true;
+    }
   },
 
   getSelectValueContext: function(inst) {
@@ -188,9 +191,6 @@ var ReactDOMSelect = {
 
   postUpdateWrapper: function(inst) {
     var props = inst._currentElement.props;
-    if (__DEV__) {
-      warnIfValueIsNull(props);
-    }
 
     // After the initial mount, we control selected-ness manually so don't pass
     // this value down
@@ -219,7 +219,9 @@ function _handleChange(event) {
   var props = this._currentElement.props;
   var returnValue = LinkedValueUtils.executeOnChange(props, event);
 
-  this._wrapperState.pendingUpdate = true;
+  if (this._rootNodeID) {
+    this._wrapperState.pendingUpdate = true;
+  }
   ReactUpdates.asap(updateOptionsIfPendingUpdateAndMounted, this);
   return returnValue;
 }

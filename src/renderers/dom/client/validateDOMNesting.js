@@ -1,5 +1,5 @@
 /**
- * Copyright 2015, Facebook, Inc.
+ * Copyright 2015-present, Facebook, Inc.
  * All rights reserved.
  *
  * This source code is licensed under the BSD-style license found in the
@@ -11,7 +11,6 @@
 
 'use strict';
 
-var assign = require('Object.assign');
 var emptyFunction = require('emptyFunction');
 var warning = require('warning');
 
@@ -76,7 +75,7 @@ if (__DEV__) {
   };
 
   var updatedAncestorInfo = function(oldInfo, tag, instance) {
-    var ancestorInfo = assign({}, oldInfo || emptyAncestorInfo);
+    var ancestorInfo = Object.assign({}, oldInfo || emptyAncestorInfo);
     var info = {tag: tag, instance: instance};
 
     if (inScopeTags.indexOf(tag) !== -1) {
@@ -209,6 +208,7 @@ if (__DEV__) {
       case 'rt':
         return impliedEndTags.indexOf(parentTag) === -1;
 
+      case 'body':
       case 'caption':
       case 'col':
       case 'colgroup':
@@ -322,10 +322,23 @@ if (__DEV__) {
 
   var didWarn = {};
 
-  validateDOMNesting = function(childTag, childInstance, ancestorInfo) {
+  validateDOMNesting = function(
+    childTag,
+    childText,
+    childInstance,
+    ancestorInfo
+  ) {
     ancestorInfo = ancestorInfo || emptyAncestorInfo;
     var parentInfo = ancestorInfo.current;
     var parentTag = parentInfo && parentInfo.tag;
+
+    if (childText != null) {
+      warning(
+        childTag == null,
+        'validateDOMNesting: when childText is passed, childTag should be null'
+      );
+      childTag = '#text';
+    }
 
     var invalidParent =
       isTagValidWithParent(childTag, parentTag) ? null : parentInfo;
@@ -384,6 +397,21 @@ if (__DEV__) {
       }
       didWarn[warnKey] = true;
 
+      var tagDisplayName = childTag;
+      var whitespaceInfo = '';
+      if (childTag === '#text') {
+        if (/\S/.test(childText)) {
+          tagDisplayName = 'Text nodes';
+        } else {
+          tagDisplayName = 'Whitespace text nodes';
+          whitespaceInfo =
+            ' Make sure you don\'t have any extra whitespace between tags on ' +
+            'each line of your source code.';
+        }
+      } else {
+        tagDisplayName = '<' + childTag + '>';
+      }
+
       if (invalidParent) {
         var info = '';
         if (ancestorTag === 'table' && childTag === 'tr') {
@@ -393,19 +421,20 @@ if (__DEV__) {
         }
         warning(
           false,
-          'validateDOMNesting(...): <%s> cannot appear as a child of <%s>. ' +
+          'validateDOMNesting(...): %s cannot appear as a child of <%s>.%s ' +
           'See %s.%s',
-          childTag,
+          tagDisplayName,
           ancestorTag,
+          whitespaceInfo,
           ownerInfo,
           info
         );
       } else {
         warning(
           false,
-          'validateDOMNesting(...): <%s> cannot appear as a descendant of ' +
+          'validateDOMNesting(...): %s cannot appear as a descendant of ' +
           '<%s>. See %s.',
-          childTag,
+          tagDisplayName,
           ancestorTag,
           ownerInfo
         );

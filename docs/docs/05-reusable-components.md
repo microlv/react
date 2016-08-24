@@ -1,7 +1,7 @@
 ---
 id: reusable-components
 title: Reusable Components
-permalink: reusable-components.html
+permalink: docs/reusable-components.html
 prev: multiple-components.html
 next: transferring-props.html
 ---
@@ -23,6 +23,7 @@ React.createClass({
     optionalNumber: React.PropTypes.number,
     optionalObject: React.PropTypes.object,
     optionalString: React.PropTypes.string,
+    optionalSymbol: React.PropTypes.symbol,
 
     // Anything that can be rendered: numbers, strings, elements or an array
     // (or fragment) containing these types.
@@ -70,9 +71,26 @@ React.createClass({
     // won't work inside `oneOfType`.
     customProp: function(props, propName, componentName) {
       if (!/matchme/.test(props[propName])) {
-        return new Error('Validation failed!');
+        return new Error(
+          'Invalid prop `' + propName + '` supplied to' +
+          ' `' + componentName + '`. Validation failed.'
+        );
       }
-    }
+    },
+
+    // You can also supply a custom validator to `arrayOf` and `objectOf`.
+    // It should return an Error object if the validation fails. The validator
+    // will be called for each key in the array or object. The first two
+    // arguments of the validator are the array or object itself, and the
+    // current item's key.
+    customArrayProp: React.PropTypes.arrayOf(function(propValue, key, componentName, location, propFullName) {
+      if (!/matchme/.test(propValue[key])) {
+        return new Error(
+          'Invalid prop `' + propFullName + '` supplied to' +
+          ' `' + componentName + '`. Validation failed.'
+        );
+      }
+    })
   },
   /* ... */
 });
@@ -80,8 +98,7 @@ React.createClass({
 
 ### Single Child
 
-With `React.PropTypes.element` you can specify that only a single child can be passed to
-a component as children.
+With `React.PropTypes.element` you can specify that only a single child can be passed to a component as children.
 
 ```javascript
 var MyComponent = React.createClass({
@@ -115,7 +132,7 @@ var ComponentWithDefaultProps = React.createClass({
 });
 ```
 
-The result of `getDefaultProps()` will be cached and used to ensure that `this.props.value` will have a value if it was not specified by the parent component. This allows you to safely just use your props without having to write repetitive and fragile code to handle that yourself.
+The result of `getDefaultProps()` will be cached and used to ensure that `this.props.value` will have a value if it was not specified by the owner component. This allows you to safely just use your props without having to write repetitive and fragile code to handle that yourself.
 
 ## Transferring Props: A Shortcut
 
@@ -197,7 +214,7 @@ class HelloMessage extends React.Component {
 ReactDOM.render(<HelloMessage name="Sebastian" />, mountNode);
 ```
 
-The API is similar to `React.createClass` with the exception of `getInitialState`. Instead of providing a separate `getInitialState` method, you set up your own `state` property in the constructor.
+The API is similar to `React.createClass` with the exception of `getInitialState`. Instead of providing a separate `getInitialState` method, you set up your own `state` property in the constructor. Just like the return value of `getInitialState`, the value you assign to `this.state` will be used as the initial state for your component.
 
 Another difference is that `propTypes` and `defaultProps` are defined as properties on the constructor instead of in the class body.
 
@@ -206,13 +223,14 @@ export class Counter extends React.Component {
   constructor(props) {
     super(props);
     this.state = {count: props.initialCount};
+    this.tick = this.tick.bind(this);
   }
   tick() {
     this.setState({count: this.state.count + 1});
   }
   render() {
     return (
-      <div onClick={this.tick.bind(this)}>
+      <div onClick={this.tick}>
         Clicks: {this.state.count}
       </div>
     );
@@ -224,7 +242,34 @@ Counter.defaultProps = { initialCount: 0 };
 
 ### No Autobinding
 
-Methods follow the same semantics as regular ES6 classes, meaning that they don't automatically bind `this` to the instance. You'll have to explicitly use `.bind(this)` or [arrow functions](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Functions/Arrow_functions) `=>`.
+Methods follow the same semantics as regular ES6 classes, meaning that they don't automatically bind `this` to the instance. You'll have to explicitly use `.bind(this)` or [arrow functions](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Functions/Arrow_functions) `=>`:
+
+```javascript
+// You can use bind() to preserve `this`
+<div onClick={this.tick.bind(this)}>
+
+// Or you can use arrow functions
+<div onClick={() => this.tick()}>
+```
+
+We recommend that you bind your event handlers in the constructor so they are only bound once for every instance:
+
+```javascript
+constructor(props) {
+  super(props);
+  this.state = {count: props.initialCount};
+  this.tick = this.tick.bind(this);
+}
+```
+
+Now you can use `this.tick` directly as it was bound once in the constructor:
+
+```javascript
+// It is already bound in the constructor
+<div onClick={this.tick}>
+```
+
+This is better for performance of your application, especially if you implement [shouldComponentUpdate()](/react/docs/component-specs.html#updating-shouldcomponentupdate) with a [shallow comparison](/react/docs/shallow-compare.html) in the child components.
 
 ### No Mixins
 
@@ -244,15 +289,31 @@ ReactDOM.render(<HelloMessage name="Sebastian" />, mountNode);
 Or using the new ES6 arrow syntax:
 
 ```javascript
-var HelloMessage = (props) => <div>Hello {props.name}</div>;
+const HelloMessage = (props) => <div>Hello {props.name}</div>;
 ReactDOM.render(<HelloMessage name="Sebastian" />, mountNode);
 ```
 
 This simplified component API is intended for components that are pure functions of their props. These components must not retain internal state, do not have backing instances, and do not have the component lifecycle methods. They are pure functional transforms of their input, with zero boilerplate.
-However, you may still specify `.propTypes` and `.defaultProps` by setting them as properties on the function, just as you would set them on an ES6 class.
+
+However, you may still specify `.propTypes` and `.defaultProps` by setting them as properties on the function, just as you would set them on an ES6 class:
+
+```javascript
+const HelloMessage = (props) => <div>Hello, {props.name}</div>;
+HelloMessage.propTypes = {
+  name: React.PropTypes.string
+}
+HelloMessage.defaultProps = {
+  name: 'John Doe'
+}
+ReactDOM.render(<HelloMessage name="Mădălina"/>, mountNode);
+```
 
 > NOTE:
 >
 > Because stateless functions don't have a backing instance, you can't attach a ref to a stateless function component. Normally this isn't an issue, since stateless functions do not provide an imperative API. Without an imperative API, there isn't much you could do with an instance anyway. However, if a user wants to find the DOM node of a stateless function component, they must wrap the component in a stateful component (eg. ES6 class component) and attach the ref to the stateful wrapper component.
 
-In an ideal world, most of your components would be stateless functions because these stateless components can follow a faster code path within the React core. This is the recommended pattern, when possible.
+> NOTE:
+>
+> In React v0.14, stateless functional components were not permitted to return `null` or `false` (a workaround is to return a `<noscript />` instead). This was fixed in React v15, and stateless functional components are now permitted to return `null`.
+
+In an ideal world, most of your components would be stateless functions because in the future we’ll also be able to make performance optimizations specific to these components by avoiding unnecessary checks and memory allocations. This is the recommended pattern, when possible.

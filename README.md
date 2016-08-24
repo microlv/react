@@ -1,12 +1,10 @@
-# [React](https://facebook.github.io/react/) [![Build Status](https://travis-ci.org/facebook/react.svg?branch=master)](https://travis-ci.org/facebook/react) [![npm version](https://badge.fury.io/js/react.svg)](http://badge.fury.io/js/react)
+# [React](https://facebook.github.io/react/) [![Build Status](https://img.shields.io/travis/facebook/react/master.svg?style=flat)](https://travis-ci.org/facebook/react) [![Coverage Status](https://img.shields.io/coveralls/facebook/react/master.svg?style=flat)](https://coveralls.io/github/facebook/react?branch=master) [![npm version](https://img.shields.io/npm/v/react.svg?style=flat)](https://www.npmjs.com/package/react) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md#pull-requests)
 
 React is a JavaScript library for building user interfaces.
 
-* **Just the UI:** Lots of people use React as the V in MVC. Since React makes no assumptions about the rest of your technology stack, it's easy to try it out on a small feature in an existing project.
-* **Virtual DOM:** React abstracts away the DOM from you, giving a simpler programming model and better performance. React can also render on the server using Node, and it can power native apps using [React Native](https://facebook.github.io/react-native/).
-* **Data flow:** React implements one-way reactive data flow which reduces boilerplate and is easier to reason about than traditional data binding.
-
-**NEW**! Check out our newest project [React Native](https://github.com/facebook/react-native), which uses React and JavaScript to create native mobile apps.
+* **Declarative:** React makes it painless to create interactive UIs. Design simple views for each state in your application, and React will efficiently update and render just the right components when your data changes. Declarative views make your code more predictable, simpler to understand, and easier to debug.
+* **Component-Based:** Build encapsulated components that manage their own state, then compose them to make complex UIs. Since component logic is written in JavaScript instead of templates, you can easily pass rich data through your app and keep state out of the DOM.
+* **Learn Once, Write Anywhere:** We don't make assumptions about the rest of your technology stack, so you can develop new features in React without rewriting existing code. React can also render on the server using Node and power mobile apps using [React Native](https://facebook.github.io/react-native/).
 
 [Learn how to use React in your own project](https://facebook.github.io/react/docs/getting-started.html).
 
@@ -33,21 +31,27 @@ You'll notice that we used an HTML-like syntax; [we call it JSX](https://faceboo
 
 ## Installation
 
-The fastest way to get started is to serve JavaScript from the CDN (also available on [cdnjs](https://cdnjs.com/libraries/react) and [jsdelivr](http://www.jsdelivr.com/#!react)):
+The fastest way to get started is to serve JavaScript from a CDN. We're using [npmcdn](https://npmcdn.com/) below but React is also available on [cdnjs](https://cdnjs.com/libraries/react) and [jsdelivr](https://www.jsdelivr.com/projects/react):
 
 ```html
 <!-- The core React library -->
-<script src="https://fb.me/react-0.14.3.js"></script>
+<script src="https://npmcdn.com/react@15.3.1/dist/react.js"></script>
 <!-- The ReactDOM Library -->
-<script src="https://fb.me/react-dom-0.14.3.js"></script>
+<script src="https://npmcdn.com/react-dom@15.3.1/dist/react-dom.js"></script>
 ```
 
-We've also built a [starter kit](https://facebook.github.io/react/downloads/react-0.14.3.zip) which might be useful if this is your first time using React. It includes a webpage with an example of using React with live code.
+We've also built a [starter kit](https://facebook.github.io/react/downloads/react-15.3.1.zip) which might be useful if this is your first time using React. It includes a webpage with an example of using React with live code.
 
 If you'd like to use [bower](http://bower.io), it's as easy as:
 
 ```sh
 bower install --save react
+```
+
+And it's just as easy with [npm](http://npmjs.com):
+
+```sh
+npm i --save react
 ```
 
 ## Contribute
@@ -61,6 +65,7 @@ The process to build `react.js` is built entirely on top of node.js, using many 
 #### Prerequisites
 
 * You have `node` installed at v4.0.0+ and `npm` at v2.0.0+.
+* You have `gcc` installed or are comfortable installing a compiler if needed. Some of our `npm` dependencies may require a compilation step. On OS X, the Xcode Command Line Tools will cover this. On Ubuntu, `apt-get install build-essential` will install the required packages. Similar commands should work on other Linux distros. Windows will require some additional steps, see the [`node-gyp` installation instructions](https://github.com/nodejs/node-gyp#installation) for details.
 * You are familiar with `npm` and know whether or not you need to use `sudo` when installing packages globally.
 * You are familiar with `git`.
 

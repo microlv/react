@@ -1,6 +1,7 @@
 ---
 id: thinking-in-react
 title: Thinking in React
+permalink: docs/thinking-in-react.html
 prev: tutorial.html
 next: conferences.html
 redirect_from: 'blog/2013/11/05/thinking-in-react.html'
@@ -61,7 +62,7 @@ Now that we've identified the components in our mock, let's arrange them into a 
 
 ## Step 2: Build a static version in React
 
-<iframe width="100%" height="300" src="https://jsfiddle.net/reactjs/yun1vgqb/embedded/" allowfullscreen="allowfullscreen" frameborder="0"></iframe>
+<iframe width="100%" height="600" src="https://jsfiddle.net/reactjs/yun1vgqb/embedded/" allowfullscreen="allowfullscreen" frameborder="0"></iframe>
 
 Now that you have your component hierarchy, it's time to implement your app. The easiest way is to build a version that takes your data model and renders the UI but has no interactivity. It's best to decouple these processes because building a static version requires a lot of typing and no thinking, and adding interactivity requires a lot of thinking and not a lot of typing. We'll see why.
 
@@ -93,8 +94,8 @@ Think of all of the pieces of data in our example application. We have:
 Let's go through each one and figure out which one is state. Simply ask three questions about each piece of data:
 
   1. Is it passed in from a parent via props? If so, it probably isn't state.
-  2. Does it change over time? If not, it probably isn't state.
-  3. Can you compute it based on any other state or props in your component? If so, it's not state.
+  2. Does it remain unchanged over time? If so, it probably isn't state.
+  3. Can you compute it based on any other state or props in your component? If so, it isn't state.
 
 The original list of products is passed in as props, so that's not state. The search text and the checkbox seem to be state since they change over time and can't be computed from anything. And finally, the filtered list of products isn't state because it can be computed by combining the original list of products with the search text and value of the checkbox.
 
@@ -105,7 +106,7 @@ So finally, our state is:
 
 ## Step 4: Identify where your state should live
 
-<iframe width="100%" height="300" src="https://jsfiddle.net/reactjs/zafjbw1e/embedded/" allowfullscreen="allowfullscreen" frameborder="0"></iframe>
+<iframe width="100%" height="600" src="https://jsfiddle.net/reactjs/zafjbw1e/embedded/" allowfullscreen="allowfullscreen" frameborder="0"></iframe>
 
 OK, so we've identified what the minimal set of app state is. Next, we need to identify which component mutates, or *owns*, this state.
 
@@ -130,11 +131,11 @@ You can start seeing how your application will behave: set `filterText` to `"bal
 
 ## Step 5: Add inverse data flow
 
-<iframe width="100%" height="300" src="https://jsfiddle.net/reactjs/n47gckhr/embedded/" allowfullscreen="allowfullscreen" frameborder="0"></iframe>
+<iframe width="100%" height="600" src="https://jsfiddle.net/reactjs/n47gckhr/embedded/" allowfullscreen="allowfullscreen" frameborder="0"></iframe>
 
 So far, we've built an app that renders correctly as a function of props and state flowing down the hierarchy. Now it's time to support data flowing the other way: the form components deep in the hierarchy need to update the state in `FilterableProductTable`.
 
-React makes this data flow explicit to make it easy to understand how your program works, but it does require a little more typing than traditional two-way data binding. React provides an add-on called `ReactLink` to make this pattern as convenient as two-way binding, but for the purpose of this post, we'll keep everything explicit.
+React makes this data flow explicit to make it easy to understand how your program works, but it does require a little more typing than traditional two-way data binding.
 
 If you try to type or check the box in the current version of the example, you'll see that React ignores your input. This is intentional, as we've set the `value` prop of the `input` to always be equal to the `state` passed in from `FilterableProductTable`.
 

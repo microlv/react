@@ -1,5 +1,5 @@
 /**
- * Copyright 2014-2015, Facebook, Inc.
+ * Copyright 2014-present, Facebook, Inc.
  * All rights reserved.
  *
  * This source code is licensed under the BSD-style license found in the
@@ -13,8 +13,9 @@
 
 var PooledClass = require('PooledClass');
 var Transaction = require('Transaction');
+var ReactInstrumentation = require('ReactInstrumentation');
+var ReactServerUpdateQueue = require('ReactServerUpdateQueue');
 
-var assign = require('Object.assign');
 
 /**
  * Executed within the scope of the `Transaction` instance. Consider these as
@@ -22,6 +23,13 @@ var assign = require('Object.assign');
  * each other.
  */
 var TRANSACTION_WRAPPERS = [];
+
+if (__DEV__) {
+  TRANSACTION_WRAPPERS.push({
+    initialize: ReactInstrumentation.debugTool.onBeginFlush,
+    close: ReactInstrumentation.debugTool.onEndFlush,
+  });
+}
 
 var noopCallbackQueue = {
   enqueue: function() {},
@@ -35,6 +43,7 @@ function ReactServerRenderingTransaction(renderToStaticMarkup) {
   this.reinitializeTransaction();
   this.renderToStaticMarkup = renderToStaticMarkup;
   this.useCreateElement = false;
+  this.updateQueue = new ReactServerUpdateQueue(this);
 }
 
 var Mixin = {
@@ -56,15 +65,28 @@ var Mixin = {
   },
 
   /**
+   * @return {object} The queue to collect React async events.
+   */
+  getUpdateQueue: function() {
+    return this.updateQueue;
+  },
+
+  /**
    * `PooledClass` looks for this, and will invoke this before allowing this
    * instance to be reused.
    */
   destructor: function() {
   },
+
+  checkpoint: function() {
+  },
+
+  rollback: function() {
+  },
 };
 
 
-assign(
+Object.assign(
   ReactServerRenderingTransaction.prototype,
   Transaction.Mixin,
   Mixin

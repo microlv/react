@@ -1,5 +1,5 @@
 /**
- * Copyright 2013-2015, Facebook, Inc.
+ * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
  *
  * This source code is licensed under the BSD-style license found in the
@@ -19,12 +19,18 @@ var ReactTransitionChildMapping = {
    * simple syntactic sugar around flattenChildren().
    *
    * @param {*} children `this.props.children`
+   * @param {number=} selfDebugID Optional debugID of the current internal instance.
    * @return {object} Mapping of key to child
    */
-  getChildMapping: function(children) {
+  getChildMapping: function(children, selfDebugID) {
     if (!children) {
       return children;
     }
+
+    if (__DEV__) {
+      return flattenChildren(children, selfDebugID);
+    }
+
     return flattenChildren(children);
   },
 

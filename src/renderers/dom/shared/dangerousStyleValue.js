@@ -1,5 +1,5 @@
 /**
- * Copyright 2013-2015, Facebook, Inc.
+ * Copyright 2013-present, Facebook, Inc.
  * All rights reserved.
  *
  * This source code is licensed under the BSD-style license found in the
@@ -12,10 +12,8 @@
 'use strict';
 
 var CSSProperty = require('CSSProperty');
-var warning = require('warning');
 
 var isUnitlessNumber = CSSProperty.isUnitlessNumber;
-var styleWarnings = {};
 
 /**
  * Convert a value into the proper css writable value. The style name `name`
@@ -43,45 +41,12 @@ function dangerousStyleValue(name, value, component) {
     return '';
   }
 
-  var isNonNumeric = isNaN(value);
-  if (isNonNumeric || value === 0 ||
-      isUnitlessNumber.hasOwnProperty(name) && isUnitlessNumber[name]) {
-    return '' + value; // cast to string
+  if (typeof value === 'number' && value !== 0 &&
+      !(isUnitlessNumber.hasOwnProperty(name) && isUnitlessNumber[name])) {
+    return value+'px'; // Presumes implicit 'px' suffix for unitless numbers
   }
 
-  if (typeof value === 'string') {
-    if (__DEV__) {
-      if (component) {
-        var owner = component._currentElement._owner;
-        var ownerName = owner ? owner.getName() : null;
-        if (ownerName && !styleWarnings[ownerName]) {
-          styleWarnings[ownerName] = {};
-        }
-        var warned = false;
-        if (ownerName) {
-          var warnings = styleWarnings[ownerName];
-          warned = warnings[name];
-          if (!warned) {
-            warnings[name] = true;
-          }
-        }
-        if (!warned) {
-          warning(
-            false,
-            'a `%s` tag (owner: `%s`) was passed a numeric string value ' +
-            'for CSS property `%s` (value: `%s`) which will be treated ' +
-            'as a unitless number in a future version of React.',
-            component._currentElement.type,
-            ownerName || 'unknown',
-            name,
-            value
-          );
-        }
-      }
-    }
-    value = value.trim();
-  }
-  return value + 'px';
+  return ('' + value).trim();
 }
 
 module.exports = dangerousStyleValue;
